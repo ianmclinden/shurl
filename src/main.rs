@@ -30,6 +30,7 @@ pub struct ShortURL {
 }
 
 impl ShortURL {
+    #[must_use]
     pub fn new(slug: String, url: String) -> Self {
         Self { slug, url, hits: 0 }
     }
@@ -131,7 +132,7 @@ struct Args {
     port: u16,
 
     /// Number of hex digits to use for shortened urls (8-32)
-    #[structopt(short = 'l', long, env = "SHURL_URL_LENGTH", default_value = "8")]
+    #[arg(short = 'l', long, env = "SHURL_URL_LENGTH", value_parser = 8..=32, default_value_t = 8)]
     url_length: u16,
 
     /// Increase verbosity
@@ -142,12 +143,6 @@ struct Args {
 #[tokio::main]
 async fn main() -> Result<(), std::io::Error> {
     let args = Args::parse();
-
-    assert!(
-        !(args.url_length < 8 || args.url_length > 32),
-        "Invalid url length: '{}' (8-32)",
-        args.url_length
-    );
 
     let log_level = match args.verbose {
         0 => LevelFilter::Warn,
@@ -162,7 +157,10 @@ async fn main() -> Result<(), std::io::Error> {
         .format_timestamp(None)
         .init();
 
-    let db = sled::open(args.database)?;
+    let db = sled::Config::default()
+        .path(args.database)
+        .mode(sled::Mode::HighThroughput)
+        .open()?;
 
     let app = Route::new()
         .at("/url/:id", post(put_url).get(get_url).delete(del_url))
